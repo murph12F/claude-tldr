@@ -1,0 +1,124 @@
+# tldr
+
+A Claude Code plugin that ends long answers with a skimmable TLDR: the outcome, and what needs you. The full answer stays. Short answers stay short. It keeps working in long sessions and after compaction because the rule is re-injected by a hook on every prompt instead of living in conversation history.
+
+## Why
+
+Long agent replies bury the two things you actually need: what happened, and whether you have to do anything. Asking for a summary once works for a few turns, then drifts. The Claude Code docs say this directly: a skill's content is added once when invoked and "can keep only the start of an invoked skill" after compaction, and a rule that must hold every time belongs in a hook ([skills: Claude stops following a skill](https://code.claude.com/docs/en/skills)).
+
+## Before / after
+
+Before (end of a 40 line reply):
+
+```
+...so I updated the retry logic in fetcher.ts, adjusted the backoff, and also
+looked at the tests. Let me know if you'd like me to make further changes!
+```
+
+After:
+
+```
+...(full answer unchanged above)
+
+TLDR:
+- Retry storm fixed: backoff now 250ms x2^n capped at 8s; p95 fetch 4.1s -> 1.3s on the replay set.
+- Needs you: approve dropping the legacy `retries=10` flag (2 callers in billing/).
+```
+
+## Install
+
+From a local checkout (no marketplace, current session only):
+
+```bash
+claude --plugin-dir /path/to/claude-tldr
+```
+
+As a marketplace (this repo is both the marketplace and the plugin):
+
+```
+/plugin marketplace add /path/to/claude-tldr      # or <owner>/<repo> once it is on GitHub
+/plugin install tldr@tldr
+```
+
+Requires `bash` and `jq`. If `jq` is missing, the hooks print a one-line error to stderr and exit 0 with no output, so the session is never broken; you just get no TLDR rules.
+
+## Use
+
+Plugin skills are namespaced `/<plugin>:<skill>`, so the toggle is `/tldr:tldr`:
+
+```
+/tldr:tldr on | off | top | bottom | short | full | strict on | strict off | status | reset
+```
+
+Each call writes `~/.claude/tldr.json` atomically and prints the effective config on one line. Changes apply from your next prompt.
+
+## Config
+
+`~/.claude/tldr.json`, overridden per key by `<project>/.claude/tldr.json`. Invalid or unknown values are ignored per key (the lower layer or default is used). A malformed file is ignored entirely.
+
+| Key | Values | Default | Meaning |
+| :- | :- | :- | :- |
+| `when` | `"long"`, `"always"`, `"off"` | `"long"` | `long`: TLDR only when the reply exceeds `long_lines`. `off`: nothing is injected |
+| `long_lines` | integer 1-500 | `8` | Threshold for `when: "long"` and for strict mode |
+| `position` | `"bottom"`, `"top"` | `"bottom"` | Where the TLDR block goes |
+| `body` | `"full"`, `"short"` | `"full"` | `short`: whole reply capped at `short_lines`. Code, commands, and security/data-loss warnings are never truncated |
+| `short_lines` | integer 1-100 | `5` | Cap for `body: "short"` |
+| `include` | subset of `["outcome","needs_you","running","risks"]` | `["outcome","needs_you"]` | Bullets in the TLDR. `Needs you:` is always present when included (says `nothing` if nothing) |
+| `max_bullets` | integer 1-5 | `3` | Bullet cap |
+| `strict` | `true`, `false` | `false` | Stop hook enforces the TLDR on long replies (see below) |
+
+Example project override:
+
+```json
+{ "position": "top", "include": ["outcome", "needs_you", "risks"] }
+```
+
+## How it works
+
+- **`UserPromptSubmit` hook** (`scripts/tldr-inject.sh`): reads the merged config and returns `hookSpecificOutput.additionalContext` with a ~60 word rule block. Because it runs on every prompt, toggles take effect immediately and the rules return after compaction without a `SessionStart` hook. The injected text is marked "newest wins" so earlier blocks still in context don't conflict. Docs: [UserPromptSubmit decision control](https://code.claude.com/docs/en/hooks), 10,000 character cap on `additionalContext`, 30 s default timeout on this event (this plugin sets 5 s).
+- **Fixed quality rules** in every injection: outcome first with concrete numbers and decisions, not process narration; `Needs you:` always present when included; never restate the question; no "I did X" recaps; short replies get no TLDR when `when` is `long`; never truncate code, commands, or security/data-loss warnings; no em dash character.
+- **Optional `Stop` hook** (`scripts/tldr-stop.sh`): only when `strict: true`. If `last_assistant_message` has more than `long_lines` non-blank lines (or any, with `when: "always"`) and no `TLDR` line, it returns `{"decision":"block","reason":...}` asking Claude to append only the TLDR. It does nothing when `stop_hook_active` is true, so it blocks at most once per stop. Docs: [Stop input and decision control](https://code.claude.com/docs/en/hooks).
+- **`/tldr:tldr` skill** (`skills/tldr/SKILL.md`): `disable-model-invocation: true`, pre-allowed to run only `${CLAUDE_PLUGIN_ROOT}/scripts/tldr-config.sh`. Skills are the documented format for new plugin commands ([plugin components](https://code.claude.com/docs/en/plugins/components), [skills](https://code.claude.com/docs/en/skills)).
+- Hook commands reference scripts through `${CLAUDE_PLUGIN_ROOT}`, quoted, as the [manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference) recommends for shell-form hooks.
+
+Cost: about 80 tokens of context per prompt while enabled. `when: "off"` injects nothing.
+
+### Security
+
+Config files are untrusted input (a cloned repo can ship `.claude/tldr.json`). Values are never eval'd or interpolated into shell commands: files are parsed by `jq`, every key is checked against a fixed whitelist inside `jq`, and the injected text is built from fixed strings plus validated integers, so a project config cannot inject free text into Claude's context. Files over 64 KB are ignored. No network calls. `/tldr:tldr` arguments are matched against literal patterns only.
+
+## Compared to
+
+- **[caveman](https://github.com/JuliusBrussee/caveman)**: compresses the whole reply. tldr keeps the full answer and adds a skim layer (or caps it with `body: "short"`).
+- **[claude-code-tldr](https://github.com/rodrigooler/claude-code-tldr)**: a skill toggle that caps every reply to 5 lines; it lives in conversation context, so it drifts in long sessions and after compaction.
+- **tldr**: hook-injected every turn, so it does not drift; per-project config; optional strict enforcement.
+
+## Tests
+
+```bash
+./tests/run.sh
+claude plugin validate .
+```
+
+`tests/run.sh` feeds sample hook JSON to the scripts in a throwaway `HOME` and checks: defaults, project override, `when: "off"`, short mode, strict block, the `stop_hook_active` guard, short replies, malformed config, hostile config values, missing `jq`, and the `/tldr` command.
+
+## Uninstall
+
+```
+/plugin uninstall tldr@tldr
+/plugin marketplace remove tldr
+rm ~/.claude/tldr.json            # optional: your saved settings
+```
+
+## Docs used
+
+- Hooks reference: https://code.claude.com/docs/en/hooks
+- Plugin manifest reference: https://code.claude.com/docs/en/plugins/manifest-reference
+- Plugin components: https://code.claude.com/docs/en/plugins/components
+- Create a marketplace: https://code.claude.com/docs/en/plugins/create-marketplace
+- Marketplace reference: https://code.claude.com/docs/en/plugins/marketplace-reference
+- Skills: https://code.claude.com/docs/en/skills
+
+## License
+
+MIT

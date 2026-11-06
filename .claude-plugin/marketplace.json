@@ -1,0 +1,14 @@
+{
+  "name": "tldr",
+  "description": "Marketplace for the tldr plugin",
+  "owner": {
+    "name": "Iacop Hafiane"
+  },
+  "plugins": [
+    {
+      "name": "tldr",
+      "source": "./",
+      "description": "Ends long answers with a skimmable TLDR. Configurable, survives compaction."
+    }
+  ]
+}

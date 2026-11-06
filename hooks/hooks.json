@@ -1,0 +1,27 @@
+{
+  "description": "tldr: inject TLDR rules every prompt; optional strict check on stop",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/tldr-inject.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/tldr-stop.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
