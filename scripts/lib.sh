@@ -52,6 +52,13 @@ def ok($k):
                                 and all(.[]; type == "string"
                                   and IN("outcome", "needs_you", "running", "risks"))
   else false end;
+def key_order: ["when", "long_lines", "position", "body", "short_lines", "include", "max_bullets", "strict"];
+def include_items: ["outcome", "needs_you", "running", "risks"];
+def allowed: {
+  when: "long|always|off", long_lines: "1-500", position: "bottom|top",
+  body: "full|short", short_lines: "1-100", include: "outcome,needs_you,running,risks",
+  max_bullets: "1-5", strict: "on|off"
+};
 def overlay($layer):
   reduce (defaults | keys[]) as $k (.;
     if ($layer | has($k)) and ($layer[$k] | ok($k)) then .[$k] = $layer[$k] else . end);

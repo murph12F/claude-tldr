@@ -1,18 +1,17 @@
 ---
 name: tldr
-description: Toggle or inspect the tldr plugin's reply summary settings (on, off, top, bottom, short, full, strict on, strict off, status, reset).
-argument-hint: "on|off|top|bottom|short|full|strict on|strict off|status|reset"
+description: Show or change the tldr plugin's reply summary settings (status, help, on, off, always, top, bottom, short, full, lines, bullets, include, strict, set, unset, reset, --project).
+argument-hint: "[status|help|on|off|always|top|bottom|short [N]|full|lines N|bullets N|include +x -y|strict on|off|set KEY VALUE|unset KEY|reset] [--project]"
 disable-model-invocation: true
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/tldr-config.sh *)
 ---
 
 Arguments: `$ARGUMENTS`
 
-Allowed arguments are exactly one of: `on`, `off`, `top`, `bottom`, `short`, `full`, `strict on`, `strict off`, `status`, `reset`, or nothing.
+1. If the arguments contain any character other than letters, digits, spaces, and `_ , + - .`, do not run anything. Reply exactly: `tldr: arguments may only contain letters, digits, spaces and _ , + - . (see /tldr:tldr help)`
+2. Otherwise run this single Bash command, with each argument word wrapped in single quotes and nothing else on the line (no arguments means none):
 
-1. If the arguments are not one of those (case-insensitive), use `status` instead. Never pass anything else.
-2. Run this single Bash command, with the argument words appended as plain separate words and nothing else on the line:
+   `${CLAUDE_PLUGIN_ROOT}/scripts/tldr-config.sh '<word>' '<word>' ...`
 
-   `${CLAUDE_PLUGIN_ROOT}/scripts/tldr-config.sh <argument words>`
-
-3. Reply with only the command's output line. No TLDR, no commentary.
+   The script validates everything itself and prints its own errors. Do not reinterpret, fix, or drop the user's words.
+3. Reply with only the command's output, verbatim, inside a fenced code block. No TLDR, no commentary.

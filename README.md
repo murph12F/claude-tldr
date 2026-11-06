@@ -44,13 +44,24 @@ Requires `bash` and `jq`. If `jq` is missing, the hooks print a one-line error t
 
 ## Use
 
-Plugin skills are namespaced `/<plugin>:<skill>`, so the toggle is `/tldr:tldr`:
+Plugin skills are namespaced `/<plugin>:<skill>`, so the command is `/tldr:tldr`:
 
 ```
-/tldr:tldr on | off | top | bottom | short | full | strict on | strict off | status | reset
+/tldr:tldr                         show settings and where each comes from
+/tldr:tldr help                    list every command
+/tldr:tldr on | off | always       TLDR on long replies / never / every reply
+/tldr:tldr top | bottom            TLDR position
+/tldr:tldr short [N] | full        cap the whole reply at N lines / no cap
+/tldr:tldr lines 12                reply length that triggers a TLDR
+/tldr:tldr bullets 2               max TLDR bullets
+/tldr:tldr include +risks -running add/remove TLDR items (or: include outcome,risks)
+/tldr:tldr strict on | strict off  Stop hook enforcement
+/tldr:tldr set KEY VALUE           any key from the table below; unset KEY drops it
+/tldr:tldr reset                   clear your settings
+/tldr:tldr --project top           any change, written to <project>/.claude/tldr.json
 ```
 
-Each call writes `~/.claude/tldr.json` atomically and prints the effective config on one line. Changes apply from your next prompt.
+`status` prints one row per key with its value, where it comes from (`default`, `user`, `project`), and the allowed values. It also flags invalid or unknown keys in either file, without echoing their contents. Changes are written atomically, rejected as a whole with a message naming the allowed values if anything is invalid, and apply from your next prompt. If a project file overrides a key you just changed in your user config, the command says so.
 
 ## Config
 
@@ -85,7 +96,7 @@ Cost: about 80 tokens of context per prompt while enabled. `when: "off"` injects
 
 ### Security
 
-Config files are untrusted input (a cloned repo can ship `.claude/tldr.json`). Values are never eval'd or interpolated into shell commands: files are parsed by `jq`, every key is checked against a fixed whitelist inside `jq`, and the injected text is built from fixed strings plus validated integers, so a project config cannot inject free text into Claude's context. Files over 64 KB are ignored. No network calls. `/tldr:tldr` arguments are matched against literal patterns only.
+Config files are untrusted input (a cloned repo can ship `.claude/tldr.json`). Values are never eval'd or interpolated into shell commands: files are parsed by `jq`, every key is checked against a fixed whitelist inside `jq`, and the injected text is built from fixed strings plus validated integers, so a project config cannot inject free text into Claude's context. Files over 64 KB are ignored. No network calls. `/tldr:tldr` arguments are matched against literal command names and passed to `jq` only as `--arg` strings; `status` reports invalid or unknown project keys by count and name of the known key, never by value.
 
 ## Compared to
 
@@ -100,7 +111,7 @@ Config files are untrusted input (a cloned repo can ship `.claude/tldr.json`). V
 claude plugin validate .
 ```
 
-`tests/run.sh` feeds sample hook JSON to the scripts in a throwaway `HOME` and checks: defaults, project override, `when: "off"`, short mode, strict block, the `stop_hook_active` guard, short replies, malformed config, hostile config values, missing `jq`, and the `/tldr` command.
+`tests/run.sh` feeds sample hook JSON to the scripts in a throwaway `HOME` and checks: defaults, project override, `when: "off"`, short mode, strict block, the `stop_hook_active` guard, short replies, malformed config, hostile config values, missing `jq`, and every `/tldr` command (shortcuts, `set`/`unset`, `include` ops, `--project`, error paths with hostile arguments, and a status that never echoes config contents).
 
 ## Uninstall
 

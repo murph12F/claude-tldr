@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (2026-11-06)
+
+- `/tldr:tldr status` (the default) is a table: value, source (`default`/`user`/`project`), and allowed values per key; flags malformed files and invalid or unknown keys without echoing their contents.
+- Every key is settable: `set KEY VALUE`, `unset KEY`, plus `always`, `short N`, `lines N`, `bullets N`, `include +x -y` / `include a,b`.
+- `--project` writes `<project>/.claude/tldr.json` instead of the user config; `reset --project` clears it.
+- Invalid input is rejected with a message naming the allowed values (exit 2, nothing written) instead of silently falling back to `status`.
+- `help` lists every command. Changes report the new effective value and warn when a project file overrides it.
+
 ## 0.1.0 (2026-11-06)
 
 - `UserPromptSubmit` hook injects TLDR rules every prompt via `additionalContext`.
